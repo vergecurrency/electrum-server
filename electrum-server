@@ -1,0 +1,111 @@
+#! /bin/bash
+
+
+electrum_config="/etc/electrum.conf"
+if [ ! -f $electrum_config ]; then
+    echo "$electrum_config does not exist"
+    echo "please run 'configure'"
+    exit 1
+fi
+
+if ! hash run_electrum_server.py 2>/dev/null; then
+    echo "run_electrum_server.py is not installed"
+    echo "Please run 'python setup.py install'"
+    exit 1
+fi
+
+
+
+function read_config()
+{
+    text=$1
+    echo `grep -e ^$text $electrum_config |awk -F\= '{print $2}' | tail -n 1| tr -d ' '`
+}
+
+# read path from config
+path=$(read_config "path")
+# read username
+user=$(read_config "username")
+
+# get PID of server
+if [ `id -u` = 0 ] ; then
+    if ! PID=`su $user -c "run_electrum_server.py getpid"`; then
+	PID=""
+    fi
+else
+    if ! PID=`run_electrum_server.py getpid`; then
+	PID=""
+    fi
+fi;
+
+case "$1" in
+    start)
+	if [ "$PID" ]; then
+	    echo "Server already running (pid $PID)"
+	    exit
+	fi
+
+	if ! [ "$path" ]; then
+	    echo "Variable path not set in $electrum_config"
+	    exit
+	fi
+
+	logfile=$(read_config "logfile")
+	if ! [ -f $logfile ]; then
+	    touch $logfile
+	    chown $user:$user $logfile
+	fi
+
+	echo "Starting server as daemon"
+	cmd="ulimit -n 65536 ; nohup run_electrum_server.py > /dev/null &"
+	if [ `id -u` = 0 ] ; then
+            su $user -c "$cmd"
+	else
+	    eval $cmd
+	fi
+	;;
+    stop)
+	if [ ! $PID ]; then
+	    echo "Server not running"
+	    exit
+	fi
+        cmd="run_electrum_server.py stop"
+	if [ `id -u` = 0 ] ; then
+            su $user -c "$cmd"
+	else
+	    $cmd
+	fi
+	echo "Waiting until process $PID terminates..."
+	while ps -p $PID > /dev/null; do sleep 1; done
+	echo "Done."
+	;;
+    status)
+	if [ ! "$PID" ]; then
+	    echo "Server not running"
+	else
+	    echo "Server running (pid $PID)"
+	fi
+	;;
+    getinfo|peers|numpeers|sessions|numsessions)
+	if [ ! "$PID" ]; then
+	    echo "Server not running"
+	    exit
+	fi
+        cmd="run_electrum_server.py $1"
+	if [ `id -u` = 0 ] ; then
+            su $user -c "$cmd"
+	else
+	    $cmd
+	fi
+	;;
+    restart)
+	$0 stop
+	$0 start
+	;;
+    *)
+	echo "Usage: electrum-server {start|stop|restart|status|getinfo|peers|numpeers|sessions|numsessions}"
+	exit 1
+	;;
+esac
+
+exit 0
