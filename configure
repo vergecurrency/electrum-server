@@ -92,7 +92,7 @@ if [ ! -d $path ]; then
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
 	mkdir -p $path
-	wget -O - "https://github.com/vergecurrency/electrumdb/master/electrumdb.zip" | tar --extract --gunzip --strip-components 1 --directory $path --file -
+	wget --no-check-certificate -O - "https://verge-blockchain.com/blockchain/electrumdb" | tar --extract --gunzip --strip-components 1 --directory $path --file -
     fi
 fi
 
